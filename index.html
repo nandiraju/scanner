@@ -1,50 +1,369 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>ZXing Barcode Scanner</title>
-  <script type="module">
-    import { BrowserMultiFormatReader } from 'https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.1/esm/index.min.js';
-
-    const codeReader = new BrowserMultiFormatReader();
-    const productList = document.getElementById('product-list');
-    const scannedItems = new Set();
-
-    function addProduct(code) {
-      if (!scannedItems.has(code)) {
-        scannedItems.add(code);
-        const li = document.createElement('li');
-        li.textContent = `Product Code: ${code}`;
-        productList.appendChild(li);
-      }
-    }
-
-    codeReader.listVideoInputDevices()
-      .then(videoInputDevices => {
-        const selectedDeviceId = videoInputDevices[0].deviceId;
-
-        codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
-          if (result) {
-            addProduct(result.getText());
-          }
-        });
-      })
-      .catch(err => console.error(err));
-  </script>
-
-  <style>
-    body { font-family: sans-serif; padding: 20px; }
-    video { width: 400px; height: auto; border: 1px solid #ccc; }
-    ul { list-style: none; padding: 0; }
-    li { padding: 5px; border-bottom: 1px solid #eee; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Barcode Scanner</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .app-title {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        
+        .control-button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            display: block;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+        
+        .stop-button {
+            background-color: #f44336;
+        }
+        
+        #scanner-container {
+            position: relative;
+            margin-bottom: 20px;
+        }
+        
+        #video-preview {
+            width: 100%;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            display: none;
+        }
+        
+        #scannerStatus {
+            text-align: center;
+            margin-top: 5px;
+            padding: 5px;
+            color: #666;
+        }
+        
+        #results {
+            padding: 15px;
+            margin-top: 20px;
+            background-color: white;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .scan-result {
+            padding: 15px;
+            margin-bottom: 15px;
+            border-left: 4px solid #4CAF50;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+        }
+        
+        .scan-result h3 {
+            margin-top: 0;
+            font-size: 18px;
+        }
+        
+        .scan-details {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .scan-value {
+            font-weight: bold;
+            font-size: 16px;
+            word-break: break-all;
+        }
+        
+        .scan-time {
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+        }
+        
+        .scan-actions {
+            margin-top: 10px;
+            display: flex;
+            justify-content: flex-end;
+        }
+        
+        .delete-button {
+            background-color: #ff6b6b;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .item-input {
+            margin-top: 15px;
+            display: none;
+        }
+        
+        .item-input label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        .item-input input, .item-input textarea {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        
+        .item-input textarea {
+            height: 80px;
+            resize: vertical;
+        }
+        
+        .item-actions {
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .item-actions button {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .cancel-button {
+            background-color: #999;
+            color: white;
+        }
+        
+        .save-button {
+            background-color: #4CAF50;
+            color: white;
+        }
+        
+        #no-items {
+            text-align: center;
+            color: #999;
+            padding: 20px;
+        }
+        
+        @media (max-width: 500px) {
+            body {
+                padding: 10px;
+            }
+        }
+    </style>
 </head>
 <body>
+    <h1 class="app-title">Barcode Scanner</h1>
+    
+    <button id="start-button" class="control-button">Start Scanner</button>
+    <button id="stop-button" class="control-button stop-button" style="display: none;">Stop Scanner</button>
+    
+    <div id="scanner-container">
+        <div id="video-preview"></div>
+        <div id="scannerStatus">Scanner inactive</div>
+    </div>
+    
+    <div class="item-input" id="item-form">
+        <h3>Add Item Details</h3>
+        <div id="scanned-code-display"></div>
+        
+        <label for="item-name">Item Name:</label>
+        <input type="text" id="item-name" placeholder="Enter item name">
+        
+        <label for="item-notes">Notes:</label>
+        <textarea id="item-notes" placeholder="Add optional notes"></textarea>
+        
+        <div class="item-actions">
+            <button class="cancel-button" id="cancel-add">Cancel</button>
+            <button class="save-button" id="save-item">Save Item</button>
+        </div>
+    </div>
+    
+    <div id="results">
+        <h2>Scanned Items</h2>
+        <div id="scanned-items-list"></div>
+        <div id="no-items">No items scanned yet</div>
+    </div>
 
-  <h1>Barcode Scanner (ZXing)</h1>
-  <video id="video" autoplay></video>
-  <h3>Scanned Products</h3>
-  <ul id="product-list"></ul>
-
+    <script>
+        let currentCode = null;
+        let isScanning = false;
+        let scannedItems = [];
+        
+        // Load saved items from localStorage
+        function loadItems() {
+            const savedItems = localStorage.getItem('barcodeItems');
+            if (savedItems) {
+                scannedItems = JSON.parse(savedItems);
+                renderItems();
+            }
+        }
+        
+        // Save items to localStorage
+        function saveItems() {
+            localStorage.setItem('barcodeItems', JSON.stringify(scannedItems));
+        }
+        
+        // Initialize scanner
+        function initScanner() {
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                Quagga.init({
+                    inputStream: {
+                        name: "Live",
+                        type: "LiveStream",
+                        target: document.querySelector('#video-preview'),
+                        constraints: {
+                            facingMode: "environment"
+                        },
+                    },
+                    decoder: {
+                        readers: [
+                            "code_128_reader",
+                            "ean_reader",
+                            "ean_8_reader",
+                            "code_39_reader",
+                            "code_39_vin_reader",
+                            "codabar_reader",
+                            "upc_reader",
+                            "upc_e_reader",
+                            "i2of5_reader"
+                        ],
+                        multiple: false
+                    }
+                }, function(err) {
+                    if (err) {
+                        console.error("Error initializing Quagga:", err);
+                        document.getElementById('scannerStatus').innerText = "Error: Could not access camera";
+                        return;
+                    }
+                    isScanning = true;
+                    Quagga.start();
+                    document.getElementById('video-preview').style.display = 'block';
+                    document.getElementById('scannerStatus').innerText = "Scanner active - point camera at a barcode";
+                    document.getElementById('start-button').style.display = 'none';
+                    document.getElementById('stop-button').style.display = 'block';
+                });
+            } else {
+                document.getElementById('scannerStatus').innerText = "Error: Camera access not supported by your browser";
+            }
+        }
+        
+        // Stop scanner
+        function stopScanner() {
+            if (isScanning) {
+                Quagga.stop();
+                isScanning = false;
+                document.getElementById('video-preview').style.display = 'none';
+                document.getElementById('scannerStatus').innerText = "Scanner inactive";
+                document.getElementById('start-button').style.display = 'block';
+                document.getElementById('stop-button').style.display = 'none';
+            }
+        }
+        
+        // Process barcode
+        function processBarcode(code) {
+            stopScanner();
+            currentCode = code;
+            document.getElementById('scanned-code-display').innerHTML = `<p class="scan-details">Barcode: <span class="scan-value">${code}</span></p>`;
+            document.getElementById('item-form').style.display = 'block';
+            document.getElementById('item-name').focus();
+        }
+        
+        // Add item to list
+        function addItem() {
+            const name = document.getElementById('item-name').value || 'Unnamed Item';
+            const notes = document.getElementById('item-notes').value || '';
+            
+            const newItem = {
+                id: Date.now().toString(),
+                code: currentCode,
+                name: name,
+                notes: notes,
+                timestamp: new Date().toLocaleString()
+            };
+            
+            scannedItems.unshift(newItem); // Add to beginning of array
+            saveItems();
+            renderItems();
+            resetForm();
+        }
+        
+        // Reset form after adding item
+        function resetForm() {
+            document.getElementById('item-form').style.display = 'none';
+            document.getElementById('item-name').value = '';
+            document.getElementById('item-notes').value = '';
+            currentCode = null;
+        }
+        
+        // Delete item
+        function deleteItem(id) {
+            scannedItems = scannedItems.filter(item => item.id !== id);
+            saveItems();
+            renderItems();
+        }
+        
+        // Render items list
+        function renderItems() {
+            const itemsList = document.getElementById('scanned-items-list');
+            const noItems = document.getElementById('no-items');
+            
+            if (scannedItems.length === 0) {
+                itemsList.innerHTML = '';
+                noItems.style.display = 'block';
+                return;
+            }
+            
+            noItems.style.display = 'none';
+            
+            itemsList.innerHTML = scannedItems.map(item => `
+                <div class="scan-result" data-id="${item.id}">
+                    <h3>${item.name}</h3>
+                    <p class="scan-details">Barcode: <span class="scan-value">${item.code}</span></p>
+                    ${item.notes ? `<p class="scan-details">Notes: ${item.notes}</p>` : ''}
+                    <p class="scan-time">Scanned: ${item.timestamp}</p>
+                    <div class="scan-actions">
+                        <button class="delete-button" onclick="deleteItem('${item.id}')">Delete</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        // Event listeners
+        document.getElementById('start-button').addEventListener('click', initScanner);
+        document.getElementById('stop-button').addEventListener('click', stopScanner);
+        document.getElementById('save-item').addEventListener('click', addItem);
+        document.getElementById('cancel-add').addEventListener('click', resetForm);
+        
+        // Process scanned barcode
+        Quagga.onDetected(function(result) {
+            const code = result.codeResult.code;
+            if (code) {
+                processBarcode(code);
+            }
+        });
+        
+        // Load saved items when page loads
+        window.addEventListener('DOMContentLoaded', loadItems);
+    </script>
 </body>
 </html>
